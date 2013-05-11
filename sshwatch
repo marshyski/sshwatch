@@ -1,0 +1,133 @@
+#!/bin/sh
+#
+# /etc/init.d/sshwatch
+#
+### RedHat checkconfig
+# chkconfig: 345 08 99
+# description:  Starts, stops sshwatch daemon \
+# Intrusion Prevention System (IPS) for ssh \
+# Continuously tail the system security log, \
+# watching for a match on "sshd", "Failed password", \
+# "Invalid user". With a match, add the source ip to \
+# list and block with iptables.
+#
+### Debian/Ubuntu update-rc.d
+### BEGIN INIT INFO
+# Provides:          sshwatch
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Intrusion Prevention System (IPS) for ssh
+# Description:       Continuously tail the system security log,
+#                    watching for a match on "sshd", "Failed password",
+#                    "Invalid user". With a match, add the source ip to
+#                    list and block with iptables.
+### END INIT INFO
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+NAME=sshwatch
+DAEMON=/usr/sbin/sshwatchd
+LOG=/var/log/sshwatch.log
+DESC="IPS for ssh"
+PIDFILE="/var/run/$NAME.pid"
+
+DISTRO=""
+
+if [ -f /etc/redhat-release ]; then
+  DISTRO=redhat
+  . /etc/init.d/functions
+  SECLOG=/var/log/secure
+  LOCKFILE="/var/lock/subsys/$NAME"
+fi
+
+if [ -f /etc/debian_version ]; then
+  DISTRO=debian
+  . /lib/lsb/init-functions
+  SECLOG=/var/log/auth.log
+  LOCKFILE="/var/lock/$NAME"
+fi
+
+if [ ! "$DISTRO" ]; then
+  echo "Unknown distro" && exit 1
+fi
+
+if [ ! -x "$DAEMON" ]; then
+  echo -n "$DAEMON can not execute or does not exist"
+  exit 1
+fi
+
+if [ ! -f "$SECLOG" ]; then
+  echo -n "$SECLOG does not exist."
+  exit 1
+fi
+
+RETVAL=""
+
+start() {
+  echo -n "Starting $DESC: "
+  case "$DISTRO" in
+    redhat) $DAEMON $SECLOG >>$LOG 2>&1 & ;;
+    debian) start-stop-daemon --start --exec $DAEMON -- $SECLOG >>$LOG 2>&1 & ;;
+  esac
+  RETVAL=$? && echo $! >$PIDFILE
+return $RETVAL 
+}
+
+stop() {
+  echo -n "Stopping $NAME: "
+  case "$DISTRO" in
+    redhat) killproc -p $PIDFILE $DAEMON ;;
+    debian) start-stop-daemon --stop --oknodo --pidfile /var/run/$NAME.pid ;;
+  esac
+  RETVAL=$?
+return $RETVAL 
+}
+
+status() {
+  STATUS=0
+  if [ -s "$PIDFILE" ]; then
+    STATUS=1
+    PID=$(cat "$PIDFILE")
+    if ps -p $PID >/dev/null 2>&1
+    then
+      echo "$NAME running PID: $PID." && exit 1
+    else
+      echo "$NAME NOT running, but $PIDFILE exits!" && exit 1
+    fi
+  fi
+return $STATUS
+}
+
+case "$1" in
+  start)
+        status
+        start
+        if [ $RETVAL -eq 0 ]; then
+          touch $LOCKFILE
+          case "$DISTRO" in
+            redhat) success; echo ;;
+            debian) log_end_msg $RETVAL ;;
+          esac
+        fi
+        ;;
+  stop)
+        stop
+        if [ $RETVAL -eq 0 ]; then
+          rm -f $LOCKFILE && rm -f $PIDFILE
+          case "$DISTRO" in
+            redhat) echo ;;
+            debian) log_end_msg $RETVAL ;;
+          esac
+        fi
+        ;;
+  status)
+        status
+        if [ "$STATUS" -eq 0 ]; then
+          echo "$NAME not running."
+        fi
+        ;;
+  *)
+        echo $"Usage: $0 {start|stop|status}"
+        exit 1
+esac

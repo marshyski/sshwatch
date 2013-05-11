@@ -1,0 +1,237 @@
+#!/usr/bin/env python
+
+import sys, os, time, re, signal, atexit, logging, subprocess, threading
+
+thresh = 60
+attempts = 4
+clear = 600
+
+#ssh_port = 22
+
+level = logging.INFO 
+#level = logging.DEBUG
+
+def usage():
+  print sys.argv[0] + " file"
+  """
+   Intrusion Prevention System (IPS) for ssh (default port 22),
+   this IPS responds to the suspicious activity by setting the firewall
+   to block network traffic from the suspected malicious source.
+   Suspicious activity is determined via auth or security logs.
+     
+   This IPS is linux only, using iptables, and thus must be run as root.
+
+   thresh   = ( number of seconds between consecutive attempts )
+
+   attempts = ( number of consecutive attempts ) 
+    
+   clear    = ( number of seconds elapsed to clear active source blocks ) 
+    
+   This IPS has been tested on:
+   debian linux - /var/log/auth.log
+   redhat linux - /var/log/secure 
+
+   Best practice for running this program:
+   ./sshwatch.py /var/log/auth.log >>/root/sshwatch.log 2>&1 &
+
+   Program Overview:
+   Continuously tail (subprocess tail -F) the system security logs,
+   watching for a match on "sshd", "Failed password", "Invalid user".
+   With a match, add the source ip to a list.  After number of
+   sequentially matched failed attempts, in consecutive order,
+   from the same source ip, under the thresh hold time,
+   puts the source ip in iptables block.
+   The "clear" value will remove the iptables block at selected
+   interval. 
+
+   "I basically got sick of seeing all these ssh dictionary attacks
+   in my security logs." Enjoy! and Happy IPS'ing, 
+   Updated Sun Jul 31 07:41:19 PDT 2011 v1.7 krink@csun.edu
+   """
+  sys.exit(1)
+
+hostname = os.uname()[1]
+format = "%(asctime)s " + hostname + " %(filename)s %(levelname)s: %(message)s"
+datefmt = "%b %d %H:%M:%S"
+logging.basicConfig(level=level, format=format, datefmt=datefmt)
+console = logging.StreamHandler(sys.stdout)
+logging.getLogger(sys.argv[0]).addHandler(console)
+
+def checksystem():
+  if sys.platform != "linux2":
+    logging.critical("Platform: %s is not linux2.", sys.platform)
+    sys.exit(1)
+
+  if os.geteuid() != 0:
+    logging.critical("UID: %s is not root.", os.geteuid())
+    sys.exit(1)
+
+  if sys.version_info < (2, 4):
+    raise "Must use python 2.4 or greater."
+    sys.exit(1)
+  
+  logging.info("Startup")
+
+
+iplist = [0]*attempts
+tmlist = [0]*attempts
+def recordip(ip,tm):
+  logging.info("listed: %s", ip)
+  iplist.insert(0,ip)
+  tmlist.insert(0,tm)
+  iplist.pop()
+  tmlist.pop()
+
+blocklist = []
+blocktime = []
+def recordblock(ip,tm):
+  logging.info("blocked ip: %s", ip)
+  blocklist.insert(0,ip)
+  blocktime.insert(0,tm)
+
+def compare():
+  count = 0
+  for index, item in enumerate(iplist):
+    if item == iplist[0]:
+      count += 1
+  return count
+
+def ipblock(ip,tm):
+#  cmd = "iptables -I INPUT -s %s -p tcp --dport %s -j DROP" % (ip, ssh_port)
+  cmd = "iptables -I INPUT -s %s -j DROP" % ip
+  os.system(cmd)
+  logging.info("%s", cmd)
+  recordblock(ip,tm)
+
+def ipremove(ip):
+#  cmd = "iptables -D INPUT -s %s -p tcp --dport %s -j DROP" % (ip, ssh_port)
+  cmd = "iptables -D INPUT -s %s -j DROP" % ip
+  os.system(cmd)
+  logging.info("%s", cmd)
+
+def checkblocklist():
+  if len(blocklist) > 0:
+    now = time.time()
+    for index, item in enumerate(blocktime):
+      diff = (now - item)
+      logging.debug("diff: %s clear: %s", diff, clear)
+      if diff > clear:
+        ip = blocklist[index]
+        ipremove(ip)
+        del blocklist[index]
+        del blocktime[index]
+
+def ticker():
+  while (sigterm == False):
+    logging.debug("sigterm: " + str(sigterm))
+    checkblocklist()
+    time.sleep(1)
+
+def follow(cmd):
+  try:
+    process = subprocess.Popen(cmd, shell=False, stdin=subprocess.PIPE,
+                                                 stdout=subprocess.PIPE,
+                                                 stderr=subprocess.STDOUT)
+    logging.debug("process.pid: %s", process.pid)
+    while (process.returncode == None):
+      line = process.stdout.readline()
+      if not line or sigterm == True:
+        break
+      else:
+        yield line
+        sys.stdout.flush()
+  except:
+    exec_info = sys.exc_info()
+    logging.debug("process exception")
+    try:
+      logging.debug(sys.version_info)
+      if sys.version_info < (2, 6):
+        os.kill(process.pid, signal.SIGKILL)
+      else:
+        process.terminate()
+      logging.debug("process terminate")
+    except:
+      import traceback
+      print >> sys.stderr, "Error in process: "
+      traceback.print_exc()
+    raise exc_info[0], exc_info[1], exc_info[2]
+  if process.poll() == None:
+    os.kill(process.pid, signal.SIGKILL)
+    logging.debug("process SIGKILL")
+
+
+def cleanup():
+  if len(blocklist) > 0:
+    for ip in blocklist:
+      ipremove(ip)
+
+if __name__ == "__main__":
+  try:
+    filename = sys.argv[1]
+  except IndexError:
+    usage()
+
+  checksystem()
+
+  sigterm = False
+  atexit.register(cleanup) #python can't catch SIGKILL (kill -9)
+  signal.signal(signal.SIGTERM, lambda signum, stack_frame: sys.exit(1))
+
+  #some log values to match/search for
+  re_sshd = re.compile(r'sshd')
+  re_invalid_user = re.compile(r'Invalid user',re.I)
+  re_failed_password = re.compile(r'Failed password',re.I)
+
+  watcher = threading.Thread(target = ticker, name = "ticker")
+  watcher.setDaemon(1)
+  watcher.start()
+
+  while (sigterm == False):
+    try:
+      for line in follow(['tail', '-F',  filename]):
+
+        if re_sshd.search(line) and re_failed_password.search(line) and re_invalid_user.search(line):
+          ip = line.split()[12]
+          logging.info("match 12: %s", ip)
+          tm = time.time()
+          recordip(ip,tm)
+        elif re_sshd.search(line) and re_failed_password.search(line) and not re_invalid_user.search(line):
+          ip = line.split()[10]
+          logging.info("match 10: %s", ip)
+          tm = time.time()
+          recordip(ip,tm)
+        else:
+          continue
+
+        if compare() >= len(iplist):
+          elapsed = (tmlist[0] - tmlist[2])
+          if thresh > elapsed:
+            logging.info("THRESH: %s %s", ip, elapsed)
+            tm = time.time()
+            ipblock(ip,tm)
+            logging.info("ip: %s will clear in %s", ip, clear)
+
+    except (KeyboardInterrupt, SystemExit, Exception):
+      sigterm = True
+      watcher.join()
+      cleanup()
+      logging.info("Shutdown: " + str(sigterm))
+      sys.exit(1)
+
+## Notes ##
+#python 2.4 SyntaxError: 'yield' not allowed in a 'try' block with a 'finally' clause
+#Duplicate finally block
+# try:
+#  yield 42
+# finally:
+#  do_something()
+#Becomes...
+# try:
+#  yield 42
+# except:  # bare except, catches *anything*
+#  do_something()
+#  raise  # re-raise same exception
+# do_something()
+#
+####
+#python 2.4 AttributeError: 'Popen' object has no attribute 'terminate'

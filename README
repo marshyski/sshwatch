@@ -1,0 +1,40 @@
+sshwatch
+
+Originally sourced from https://code.google.com/p/sshwatch/
+
+Intrusion Prevention System (IPS) for Secure Shell (SSH), this IPS responds to the suspicious activity by setting the Linux firewall (iptables) to block network traffic from the suspected malicious source. Suspicious activity is determined via auth or secure logs.
+
+== TECH OVERVIEW ==
+Continuously tail (subprocess tail -F) the system security logs, searching for a match on "sshd", "Failed password", "Invalid user". With a match, add the source ip to a list. After number of sequentially matched failed attempts, in consecutive order, from the same source ip, under the thresh hold time, puts the source ip in iptables block. The "clear" value will remove the iptables block at selected interval.
+
+== DEPENDENCIES ==
+- Linux (redhat, debian)
+- OpenSSH Server
+- Python 2.4+
+- iptables (IPv4)
+
+VARIABLES IN SSHWATCHD
+thresh = (number of seconds between consecutive attempts, default is 60)
+attempts = (number of consecutive attempts, default is 4)
+clear = (number of seconds elapsed to clear active source blocks, default is 600)
+
+== TESTED ON ==
+- debian linux - /var/log/auth.log
+- redhat linux - /var/log/secure
+
+== RUN IN STANDALONE / NO-DAEMON MODE ==
+
+./sshwatchd /var/log/secure >>/root/sshwatch.log 2>&1 &
+
+== INSTALL ==
+sshwatch  -> /etc/init.d
+sshwatchd -> /usr/sbin
+
+chmod -f 0700 /etc/init.d/sshwatch /usr/sbin/sshwatchd
+chown -f root:root /etc/init.d/sshwatch /usr/sbin/sshwatchd
+chkconfig sshwatch on #redhat only
+/etc/init.d/sshwatch start
+
+== CHANGES ==
+- Block all traffic from an IP not just on SRC IP / Port 22
+
