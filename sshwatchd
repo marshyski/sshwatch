@@ -4,8 +4,14 @@ import sys, os, time, re, signal, atexit, logging, subprocess, threading
 
 thresh = 60
 attempts = 4
-clear = 600
+clear = 3600
 
+## 1 = ENABLE, 0 = DISABLE
+nmap = 0
+nmaplog = "/var/log/nmap.log"
+
+
+## BLOCK ALL PORTS NOT JUST PORT 22
 #ssh_port = 22
 
 level = logging.INFO 
@@ -14,39 +20,42 @@ level = logging.INFO
 def usage():
   print sys.argv[0] + " file"
   """
-   Intrusion Prevention System (IPS) for ssh (default port 22),
-   this IPS responds to the suspicious activity by setting the firewall
-   to block network traffic from the suspected malicious source.
-   Suspicious activity is determined via auth or security logs.
+   Intrusion Prevention System (IPS) for Secure Shell (ssh),
+   this IPS responds to the suspicious activity by setting the Linux 
+   firewall (iptables) to block network traffic from the suspected 
+   malicious source. Suspicious activity is determined via auth or 
+   secure logs and nmap is ran against malicious source.
      
-   This IPS is linux only, using iptables, and thus must be run as root.
+   This IPS is linux only, using iptables, nmap (optional) and must be run as root.
 
    thresh   = ( number of seconds between consecutive attempts )
 
    attempts = ( number of consecutive attempts ) 
     
    clear    = ( number of seconds elapsed to clear active source blocks ) 
-    
+   
+   nmap	    = ( nmap probe malicious source )
+ 
    This IPS has been tested on:
-   debian linux - /var/log/auth.log
-   redhat linux - /var/log/secure 
+   Debian linux - /var/log/auth.log
+   Redhat linux - /var/log/secure 
 
    Best practice for running this program:
-   ./sshwatch.py /var/log/auth.log >>/root/sshwatch.log 2>&1 &
+   ./sshwatchd /var/log/auth.log >/var/log/sshwatch.log 2>&1 & #Debain
+   ./sshwatchd /var/log/secure >/var/log/sshwatch.log 2>&1 & #Redhat
 
-   Program Overview:
+   Technical Overview:
    Continuously tail (subprocess tail -F) the system security logs,
    watching for a match on "sshd", "Failed password", "Invalid user".
    With a match, add the source ip to a list.  After number of
    sequentially matched failed attempts, in consecutive order,
    from the same source ip, under the thresh hold time,
-   puts the source ip in iptables block.
+   puts the source ip in iptables block and nmap is ran.
    The "clear" value will remove the iptables block at selected
    interval. 
 
-   "I basically got sick of seeing all these ssh dictionary attacks
-   in my security logs." Enjoy! and Happy IPS'ing, 
    Updated Sun Jul 31 07:41:19 PDT 2011 v1.7 krink@csun.edu
+   Updated Sat Jun 01 07:38:19 PDT 2013 v2.0 marshyski@gmail.com
    """
   sys.exit(1)
 
@@ -102,6 +111,10 @@ def ipblock(ip,tm):
   os.system(cmd)
   logging.info("%s", cmd)
   recordblock(ip,tm)
+  if nmap == 1:
+    open(nmaplog, "a")
+    cmd = "nmap -T4 -A -Pn %s >> %s" % (ip, nmaplog)
+    os.system(cmd)
 
 def ipremove(ip):
 #  cmd = "iptables -D INPUT -s %s -p tcp --dport %s -j DROP" % (ip, ssh_port)

@@ -1,30 +1,45 @@
-sshwatch
+sshwatch v2.0
 
 Originally sourced from https://code.google.com/p/sshwatch/
+krink@csun.edu
 
-Intrusion Prevention System (IPS) for Secure Shell (SSH), this IPS responds to the suspicious activity by setting the Linux firewall (iptables) to block network traffic from the suspected malicious source. Suspicious activity is determined via auth or secure logs.
+Intrusion Prevention System (IPS) for Secure Shell (SSH), this IPS responds to the suspicious activity by setting the Linux firewall (iptables) to block network traffic from the suspected malicious source. Suspicious activity is determined via auth or secure logs and nmap is ran against malicious source.
 
-== TECH OVERVIEW ==
-Continuously tail (subprocess tail -F) the system security logs, searching for a match on "sshd", "Failed password", "Invalid user". With a match, add the source ip to a list. After number of sequentially matched failed attempts, in consecutive order, from the same source ip, under the thresh hold time, puts the source ip in iptables block. The "clear" value will remove the iptables block at selected interval.
+== TECHNICAL OVERVIEW ==
+Continuously tail (subprocess tail -F) the system security logs, searching for a match on "sshd", "Failed password", "Invalid user". With a match, add the source ip to a list. After number of sequentially matched failed attempts, in consecutive order, from the same source ip, under the thresh hold time, puts the source ip in iptables block and nmap is ran. The "clear" value will remove the iptables block at selected interval.
+
+                                                         -------------------------
+--------------------    -------------    ------------- / | iptables Blocked BFer | \
+|                  |    |           |    |           |   -------------------------  -----------------------
+| SSH Brute Forcer | -> |  System   | -> | sshwatchd |                              | Clear iptables BFer |
+|       (BFer)     |    | (Port 22) |    |           |   ---------------------      |    in 60 mintues    |
+--------------------    -------------    ------------- \ | NMAP Probed BFer  |      -----------------------
+                                                         | /var/log/nmap.log |
+                                                         ---------------------
 
 == DEPENDENCIES ==
-- Linux (redhat, debian)
+- Linux (Redhat, Debian)
+- root priviledge
 - OpenSSH Server
 - Python 2.4+
 - iptables (IPv4)
+- nmap (optional)
 
-VARIABLES IN SSHWATCHD
-thresh = (number of seconds between consecutive attempts, default is 60)
-attempts = (number of consecutive attempts, default is 4)
-clear = (number of seconds elapsed to clear active source blocks, default is 600)
+== VARIABLES IN SSHWATCHD ==
+thresh   = ( number of seconds between consecutive attempts, default is 60 )
+attempts = ( number of consecutive attempts, default is 4 )
+clear    = ( number of seconds elapsed to clear active source blocks, default is 3600 )
+nmaplog  = ( nmap probes are logged here, default is /var/log/nmap.log )
+nmap     = ( nmap probe malicious source and stored in nmaplog, default is 0 (off) )
 
 == TESTED ON ==
-- debian linux - /var/log/auth.log
-- redhat linux - /var/log/secure
+- Debian linux - /var/log/auth.log
+- Redhat linux - /var/log/secure
 
 == RUN IN STANDALONE / NO-DAEMON MODE ==
 
-./sshwatchd /var/log/secure >>/root/sshwatch.log 2>&1 &
+./sshwatchd /var/log/auth.log >/var/log/sshwatch.log 2>&1 & #Debian
+./sshwatchd /var/log/secure >/var/log/sshwatch.log 2>&1 &   #Redhat
 
 == INSTALL ==
 sshwatch  -> /etc/init.d
@@ -32,9 +47,10 @@ sshwatchd -> /usr/sbin
 
 chmod -f 0700 /etc/init.d/sshwatch /usr/sbin/sshwatchd
 chown -f root:root /etc/init.d/sshwatch /usr/sbin/sshwatchd
-chkconfig sshwatch on #redhat only
+chkconfig sshwatch on #Redhat only
 /etc/init.d/sshwatch start
 
-== CHANGES ==
-- Block all traffic from an IP not just on SRC IP / Port 22
-
+== CHANGES IN 2.0 ==
+- Block all traffic from an IP not just on source IP / Port 22
+- NMAP source IP and store in /var/log/nmap.log log
+- Updated README
