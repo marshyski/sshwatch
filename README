@@ -3,19 +3,19 @@ sshwatch v2.0
 Originally sourced from https://code.google.com/p/sshwatch/
 krink@csun.edu
 
-Intrusion Prevention System (IPS) for Secure Shell (SSH), this IPS responds to the suspicious activity by setting the Linux firewall (iptables) to block network traffic from the suspected malicious source. Suspicious activity is determined via auth or secure logs and nmap is ran against malicious source.
+Intrusion Prevention System (IPS) for Secure Shell (SSH), this IPS responds to the suspicious activity by setting the Linux firewall (iptables) to block network traffic from the suspected malicious source. Suspicious activity is determined via auth or secure logs and nmap/dig is ran against malicious source.
 
 == TECHNICAL OVERVIEW ==
-Continuously tail (subprocess tail -F) the system security logs, searching for a match on "sshd", "Failed password", "Invalid user". With a match, add the source ip to a list. After number of sequentially matched failed attempts, in consecutive order, from the same source ip, under the thresh hold time, puts the source ip in iptables block and nmap is ran. The "clear" value will remove the iptables block at selected interval.
+Continuously tail (subprocess tail -F) the system security logs, searching for a match on "sshd", "Failed password", "Invalid user". With a match, add the source ip to a list. After number of sequentially matched failed attempts, in consecutive order, from the same source ip, under the thresh hold time, puts the source ip in iptables block and nmap/dig is ran. The "clear" value will remove the iptables block at selected interval.
 
                                         ----------------------
 ----------    --------    ----------- / |iptables Blocks BFer| \
 |        |    |      |    |         |   ----------------------  -----------------
 |SSH BFer| -> |System| -> |sshwatchd|                           |Clear iptables |
-|        |    |      |    |         |   -------------------     |BFer in 60 mins|
-----------    --------    ----------- \ |NMAP Probed BFer |     -----------------
-                                        |/var/log/nmap.log|
-BFer = Brute Forcer                     -------------------
+|        |    |      |    |         |   ----------------------  |BFer in 60 mins|
+----------    --------    ----------- \ |NMAP/dig Probed BFer|  -----------------
+                                        |/var/log/nmap.log   |
+BFer = Brute Forcer                     ----------------------
 
 == DEPENDENCIES ==
 - Linux (Redhat, Debian)
@@ -24,6 +24,7 @@ BFer = Brute Forcer                     -------------------
 - Python 2.4+
 - iptables (IPv4)
 - nmap (optional)
+- dig (bind-utils) (optional)
 
 == VARIABLES IN SSHWATCHD ==
 thresh   = ( number of seconds between consecutive attempts, default is 60 )

@@ -24,7 +24,7 @@ def usage():
    this IPS responds to the suspicious activity by setting the Linux 
    firewall (iptables) to block network traffic from the suspected 
    malicious source. Suspicious activity is determined via auth or 
-   secure logs and nmap is ran against malicious source.
+   secure logs and nmap/dig is ran against malicious source.
      
    This IPS is linux only, using iptables, nmap (optional) and must be run as root.
 
@@ -34,7 +34,7 @@ def usage():
     
    clear    = ( number of seconds elapsed to clear active source blocks ) 
    
-   nmap	    = ( nmap probe malicious source )
+   nmap	    = ( nmap and dig probe malicious source )
  
    This IPS has been tested on:
    Debian linux - /var/log/auth.log
@@ -50,7 +50,7 @@ def usage():
    With a match, add the source ip to a list.  After number of
    sequentially matched failed attempts, in consecutive order,
    from the same source ip, under the thresh hold time,
-   puts the source ip in iptables block and nmap is ran.
+   puts the source ip in iptables block and nmap/dig is ran.
    The "clear" value will remove the iptables block at selected
    interval. 
 
@@ -65,6 +65,7 @@ datefmt = "%b %d %H:%M:%S"
 logging.basicConfig(level=level, format=format, datefmt=datefmt)
 console = logging.StreamHandler(sys.stdout)
 logging.getLogger(sys.argv[0]).addHandler(console)
+devnull = open(os.devnull)
 
 def checksystem():
   if sys.platform != "linux2":
@@ -115,6 +116,9 @@ def ipblock(ip,tm):
     open(nmaplog, "a")
     cmd = "nmap -T4 -A -Pn %s >> %s" % (ip, nmaplog)
     os.system(cmd)
+    if subprocess.call(["which", "dig"], stdout=devnull, stderr=devnull) == 0:
+       cmd = "dig %s | grep -v ';\|^$' >> %s" % (ip, nmaplog)
+       os.system(cmd)
 
 def ipremove(ip):
 #  cmd = "iptables -D INPUT -s %s -p tcp --dport %s -j DROP" % (ip, ssh_port)
