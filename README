@@ -42,8 +42,14 @@ nmap     = ( nmap probe malicious source and stored in nmaplog, default is 0 (of
 ./sshwatchd /var/log/secure >/var/log/sshwatch.log 2>&1 &   #Redhat
 
 == INSTALL ==
+** From source 
+git clone https://github.com/marshyski/sshwatch.git
 sshwatch  -> /etc/init.d
 sshwatchd -> /usr/sbin
+
+** From packages
+rpm -ivh sshwatch-2.0-1.noarch.rpm #Redhat only
+dpkg -i sshwatch_2.0_all.deb #Debian only
 
 chmod -f 0700 /etc/init.d/sshwatch /usr/sbin/sshwatchd
 chown -f root:root /etc/init.d/sshwatch /usr/sbin/sshwatchd
