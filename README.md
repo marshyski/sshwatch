@@ -72,7 +72,7 @@ Changes from 1.0 to 2.0
 - Block all traffic from an IP not just on source IP / Port 22
 - NMAP/Dig source IP and store in /var/log/nmap.log
 - Packages, curtisity of [fpm][4] building.
-- Provide a rich README
+- A rich README ^_^
 
 Help & Feedback
 ---------------
