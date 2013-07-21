@@ -1,7 +1,6 @@
 SSHWATCH ``v2.0``
 ========
---------
-Intrusion Prevention System (**IPS**) for Secure Shell (**SSH**) sourced from https://code.google.com/p/sshwatch/ - krink@csun.edu THANKS HOMIE!
+Intrusion Prevention System ( **IPS** ) for Secure Shell ( **SSH** ) sourced from https://code.google.com/p/sshwatch/ - krink@csun.edu THANKS HOMIE!
 
 Why use this?
 -------------
@@ -68,7 +67,7 @@ Usage
     ./sshwatchd /var/log/auth.log >/var/log/sshwatch.log 2>&1 & #Debian
     ./sshwatchd /var/log/secure >/var/log/sshwatch.log 2>&1 &   #Redhat
 
-Changes ``from 1.0 to 2.0`` 
+Changes From 1.0 to 2.0
 -----------
 - Block all traffic from an IP not just on source IP / Port 22
 - NMAP/Dig source IP and store in /var/log/nmap.log
